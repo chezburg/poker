@@ -1,37 +1,37 @@
-version: "3.9"
+  version: "3.9"
 
-services:
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes --save 60 1
+  services:
+    redis:
+      image: redis:7-alpine
+      restart: unless-stopped
+      volumes:
+        - redis-data:/data
+      command: redis-server --appendonly yes --save 60 1
 
-  server:
-    build: ./server
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-      - REDIS_URL=redis://redis:6379
-      - PORT=3001
-      - LOBBY_TIMEOUT_HOURS=${LOBBY_TIMEOUT_HOURS:-24}
-      - MAX_LOBBIES=${MAX_LOBBIES:-3}
-    depends_on:
-      - redis
-    ports:
-      - "3003:3001"
+    server:
+      build: ./server
+      restart: unless-stopped
+      environment:
+        - NODE_ENV=production
+        - REDIS_URL=redis://redis:6379
+        - PORT=3001
+        - LOBBY_TIMEOUT_HOURS=${LOBBY_TIMEOUT_HOURS:-24}
+        - MAX_LOBBIES=${MAX_LOBBIES:-3}
+      depends_on:
+        - redis
+      ports:
+        - "3003:3001"
 
-  client:
-    build:
-      context: ./client
-      args:
-        - VITE_SERVER_URL=${VITE_SERVER_URL:-}
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - server
+    client:
+      build:
+        context: ./client
+        args:
+          - VITE_SERVER_URL=${VITE_SERVER_URL:-}
+      restart: unless-stopped
+      ports:
+        - "8982:80"
+      depends_on:
+        - server
 
-volumes:
-  redis-data:
+  volumes:
+    redis-data:
