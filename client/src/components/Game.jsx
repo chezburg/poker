@@ -37,6 +37,13 @@ export default function Game({ code }) {
         const data = await safeFetch(`${SERVER_URL}/api/lobbies/${code}`);
         setLobby(data.lobby);
         setLoading(false);
+
+        // Check for toast messages from creation
+        const creationMsg = sessionStorage.getItem(`lobby_msg_${code}`);
+        if (creationMsg) {
+          showToast(creationMsg);
+          sessionStorage.removeItem(`lobby_msg_${code}`);
+        }
       } catch (e) {
         setError(e.message);
         setLoading(false);

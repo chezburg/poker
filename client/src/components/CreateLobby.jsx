@@ -38,6 +38,10 @@ export default function CreateLobby() {
       const code = data.lobby.code;
       saveSession(code, data.playerId);
 
+      if (data.message) {
+        sessionStorage.setItem(`lobby_msg_${code}`, data.message);
+      }
+
       // Give starting chips to creator via REST before navigating
       // Settings will be applied after socket connect
       navigate(`game/${code}`);

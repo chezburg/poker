@@ -23,7 +23,7 @@
         - REDIS_URL=redis://redis:6379
         - PORT=3001
         - LOBBY_TIMEOUT_HOURS=${LOBBY_TIMEOUT_HOURS:-24}
-        - MAX_LOBBIES=${MAX_LOBBIES:-3}
+        - MAX_LOBBIES=${MAX_LOBBIES:-5}
       depends_on:
         - redis
       ports:

@@ -11,7 +11,7 @@ const server = http.createServer(app);
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const PORT = process.env.PORT || 3001;
 const LOBBY_TIMEOUT_HOURS = parseInt(process.env.LOBBY_TIMEOUT_HOURS || "24");
-const MAX_LOBBIES = parseInt(process.env.MAX_LOBBIES || "3");
+const MAX_LOBBIES = parseInt(process.env.MAX_LOBBIES || "5");
 const LOBBY_TTL = LOBBY_TIMEOUT_HOURS * 3600;
 const STALE_THRESHOLD = 30 * 60 * 1000; // 30 minutes
 
@@ -88,6 +88,32 @@ async function cleanStaleLobbies() {
       }
     }
   }
+}
+
+async function cleanOldestLobby() {
+  const codes = await listLobbyCodes();
+  let oldestCode = null;
+  let oldestActivity = Infinity;
+
+  for (const code of codes) {
+    const lobby = await getLobby(code);
+    if (!lobby) continue;
+
+    const lastActivity = Math.max(
+      ...lobby.players.map((p) => p.lastSeen || 0),
+      lobby.createdAt || 0
+    );
+
+    if (lastActivity < oldestActivity) {
+      oldestActivity = lastActivity;
+      oldestCode = code;
+    }
+  }
+
+  if (oldestCode) {
+    await deleteLobby(oldestCode);
+  }
+  return oldestCode;
 }
 
 // ─── Game logic helpers ───────────────────────────────────────────────────────
@@ -352,7 +378,10 @@ app.post("/api/lobbies", async (req, res) => {
       await cleanStaleLobbies();
       count = await countActiveLobbies();
     }
-    if (count >= MAX_LOBBIES) return res.status(429).json({ error: `Max ${MAX_LOBBIES} lobbies active at once` });
+    let cleanedCode = null;
+    if (count >= MAX_LOBBIES) {
+      cleanedCode = await cleanOldestLobby();
+    }
 
     const lobby = createLobby(lobbyName.trim(), playerName.trim());
 
@@ -376,7 +405,11 @@ app.post("/api/lobbies", async (req, res) => {
     await saveLobby(lobby);
     await addLobbyToIndex(lobby.code);
 
-    res.json({ lobby: sanitizeLobby(lobby), playerId: creator.id });
+    res.json({ 
+      lobby: sanitizeLobby(lobby), 
+      playerId: creator.id,
+      message: cleanedCode ? `max lobby is ${MAX_LOBBIES}, cleaned code ${cleanedCode} lobby` : null
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

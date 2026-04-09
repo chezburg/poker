@@ -23,7 +23,7 @@ Everyone joins from their own phone — no physical chips needed.
   - Per-player chip adjustments
 - Lobby persistence via Redis (survives server restarts)
 - Disconnected players can rejoin and pick their existing slot
-- Up to 3 concurrent lobbies (configurable)
+- Up to 5 concurrent lobbies (configurable)
 - Lobbies auto-expire after 24 hours of inactivity (configurable)
 
 ---
@@ -58,8 +58,8 @@ VITE_SERVER_URL=
 # Hours before an inactive lobby is cleaned up (default: 24)
 LOBBY_TIMEOUT_HOURS=24
 
-# Maximum concurrent lobbies (default: 3)
-MAX_LOBBIES=3
+# Maximum concurrent lobbies (default: 5)
+MAX_LOBBIES=5
 ```
 
 ### 3. Build and start
@@ -141,7 +141,7 @@ rebuild with `docker compose up -d --build`.
 |---|---|---|
 | `VITE_SERVER_URL` | `` (empty) | Public URL of the server. Empty = same origin |
 | `LOBBY_TIMEOUT_HOURS` | `24` | Hours until unused lobby expires |
-| `MAX_LOBBIES` | `3` | Maximum concurrent active lobbies |
+| `MAX_LOBBIES` | `5` | Maximum concurrent active lobbies |
 
 ---
 
