@@ -35,10 +35,9 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
     showToast(`Gave ${amt.toLocaleString()} chips to ${transferTarget.name}`);
   }
 
-  const lastRaise = lobby.actionLog?.find(
-    (e) => e.round === lobby.round && e.action === "raise"
-  );
-  const amountToCall = (lastRaise && lastRaise.playerName !== me.name) ? lastRaise.amount : 0;
+  const maxContribution = Math.max(0, ...Object.values(lobby.contributions || {}));
+  const myContribution = lobby.contributions?.[me.id] || 0;
+  const amountToCall = maxContribution - myContribution;
 
   function handleCheckOrCall() {
     if (amountToCall > 0) {

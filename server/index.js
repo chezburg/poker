@@ -182,16 +182,71 @@ function advanceTurn(lobby) {
 function getBlinds(lobby) {
   if (!lobby.settings.blindsMode) return null;
   const ordered = getOrderedPlayers(lobby);
-  if (ordered.length < 2) return null;
   const n = ordered.length;
+  if (n < 2) return null;
+
   const dealerIdx = lobby.dealerIndex % n;
-  const sbIdx = (dealerIdx + 1) % n;
-  const bbIdx = (dealerIdx + 2) % n;
-  return {
-    dealer: ordered[dealerIdx],
-    smallBlind: ordered[sbIdx],
-    bigBlind: ordered[bbIdx],
-  };
+  if (n === 2) {
+    // Heads up: Dealer is SB, other is BB. Action starts with SB (Dealer) pre-flop.
+    return {
+      dealer: ordered[dealerIdx],
+      smallBlind: ordered[dealerIdx],
+      bigBlind: ordered[(dealerIdx + 1) % n],
+    };
+  } else {
+    // 3+ players: Dealer, SB (Dealer+1), BB (Dealer+2)
+    return {
+      dealer: ordered[dealerIdx],
+      smallBlind: ordered[(dealerIdx + 1) % n],
+      bigBlind: ordered[(dealerIdx + 2) % n],
+    };
+  }
+}
+
+function startNewRound(lobby) {
+  lobby.round += 1;
+  advanceDealer(lobby);
+  lobby.contributions = {};
+  lobby.pots = [];
+  lobby.pot = 0;
+  lobby.turnCount = 0;
+
+  const ordered = getOrderedPlayers(lobby);
+  const n = ordered.length;
+  if (n === 0) return;
+
+  if (lobby.settings.blindsMode && n >= 2) {
+    const blinds = getBlinds(lobby);
+    const currentBlinds = computeCurrentBlinds(lobby);
+
+    // Post SB
+    if (blinds.smallBlind) {
+      const sbAmt = Math.min(currentBlinds.smallBlind, blinds.smallBlind.chips);
+      blinds.smallBlind.chips -= sbAmt;
+      lobby.contributions[blinds.smallBlind.id] = sbAmt;
+      logAction(lobby, blinds.smallBlind.name, "paid small blind", sbAmt);
+    }
+
+    // Post BB
+    if (blinds.bigBlind) {
+      const bbAmt = Math.min(currentBlinds.bigBlind, blinds.bigBlind.chips);
+      blinds.bigBlind.chips -= bbAmt;
+      lobby.contributions[blinds.bigBlind.id] = (lobby.contributions[blinds.bigBlind.id] || 0) + bbAmt;
+      logAction(lobby, blinds.bigBlind.name, "paid big blind", bbAmt);
+    }
+
+    calculatePots(lobby);
+
+    // Turn starts after BB
+    // In heads-up (n=2), BB is index (dealerIdx + 1). Next is dealerIdx (the SB).
+    // In 3+ players, BB is index (dealerIdx + 2). Next is (dealerIdx + 3).
+    const bbIdx = ordered.findIndex(p => p.id === blinds.bigBlind.id);
+    const startIdx = (bbIdx + 1) % n;
+    lobby.currentTurn = ordered[startIdx].id;
+  } else {
+    const startIdx = (lobby.dealerIndex + 1) % n;
+    lobby.currentTurn = ordered[startIdx].id;
+  }
 }
 
 function advanceDealer(lobby) {
@@ -498,22 +553,11 @@ io.on("connection", (socket) => {
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
 
-    // "Turn 1" Blind Logic: first rotation through table
-    const ordered = getOrderedPlayers(lobby);
-    if (lobby.turnCount < ordered.length && lobby.settings.blindsMode) {
-      const blinds = getBlinds(lobby);
-      const currentBlinds = computeCurrentBlinds(lobby);
-      let blindAmt = 0;
-      if (player.id === blinds.smallBlind?.id) blindAmt = currentBlinds.smallBlind;
-      else if (player.id === blinds.bigBlind?.id) blindAmt = currentBlinds.bigBlind;
-      
-      if (blindAmt > 0) {
-        const actual = Math.min(blindAmt, player.chips);
-        player.chips -= actual;
-        lobby.contributions[player.id] = (lobby.contributions[player.id] || 0) + actual;
-        calculatePots(lobby);
-        logAction(lobby, player.name, "paid blind", actual);
-      }
+    const maxContribution = Math.max(0, ...Object.values(lobby.contributions));
+    const myContribution = lobby.contributions[player.id] || 0;
+
+    if (myContribution < maxContribution) {
+      return socket.emit("error", `Cannot check. Must call ${maxContribution - myContribution} or fold.`);
     }
 
     logAction(lobby, player.name, "check", null);
@@ -564,17 +608,7 @@ io.on("connection", (socket) => {
 
     // If no more pots, advance round
     if (lobby.pot === 0) {
-      lobby.round += 1;
-      advanceDealer(lobby);
-      lobby.contributions = {}; // Reset contributions for new round
-
-      const ordered = getOrderedPlayers(lobby);
-      if (ordered.length > 0) {
-        const n = ordered.length;
-        const startIdx = (lobby.dealerIndex + 1) % n;
-        lobby.currentTurn = ordered[startIdx].id;
-        lobby.turnCount = 0;
-      }
+      startNewRound(lobby);
       logAction(lobby, "—", "new round", lobby.round);
     }
 
@@ -617,17 +651,7 @@ io.on("connection", (socket) => {
     lobby.pot = remainingPots.reduce((sum, p) => sum + p.amount, 0);
     
     if (lobby.pot === 0) {
-      lobby.round += 1;
-      advanceDealer(lobby);
-      lobby.contributions = {};
-
-      const ordered = getOrderedPlayers(lobby);
-      if (ordered.length > 0) {
-        const n = ordered.length;
-        const startIdx = (lobby.dealerIndex + 1) % n;
-        lobby.currentTurn = ordered[startIdx].id;
-        lobby.turnCount = 0;
-      }
+      startNewRound(lobby);
       logAction(lobby, "—", "new round", lobby.round);
     }
 
@@ -641,21 +665,7 @@ io.on("connection", (socket) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
 
-    lobby.round += 1;
-    advanceDealer(lobby);
-    lobby.contributions = {}; // Clear contributions
-    lobby.pots = []; // Clear pots
-    lobby.pot = 0;
-    
-    // Set starting turn: player after dealer (SB)
-    const ordered = getOrderedPlayers(lobby);
-    if (ordered.length > 0) {
-      const n = ordered.length;
-      const startIdx = (lobby.dealerIndex + 1) % n;
-      lobby.currentTurn = ordered[startIdx].id;
-      lobby.turnCount = 0;
-    }
-
+    startNewRound(lobby);
     logAction(lobby, "—", "new round", lobby.round);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
