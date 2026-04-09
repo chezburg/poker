@@ -138,6 +138,8 @@ function createLobby(name, creatorName) {
     turnCount: 0,
     settings,
     actionLog: [],
+    pots: [], // { amount: number, eligible: string[] }
+    contributions: {}, // { playerId: number }
   };
 }
 
@@ -220,6 +222,39 @@ function logAction(lobby, playerName, action, amount) {
     amount: amount || null,
   });
   if (lobby.actionLog.length > 100) lobby.actionLog = lobby.actionLog.slice(0, 100);
+}
+
+function calculatePots(lobby) {
+  // players who have contributed anything to the pot
+  const contributors = Object.keys(lobby.contributions).filter(id => lobby.contributions[id] > 0);
+  if (contributors.length === 0) {
+    lobby.pots = [];
+    return;
+  }
+
+  // Find all distinct contribution levels (all-in points)
+  const levels = Array.from(new Set(contributors.map(id => lobby.contributions[id]))).sort((a, b) => a - b);
+  
+  const pots = [];
+  let prevLevel = 0;
+
+  for (const level of levels) {
+    const incrementalAmount = level - prevLevel;
+    // Anyone who contributed at least 'level' is eligible for this slice
+    const eligible = contributors.filter(id => lobby.contributions[id] >= level);
+    
+    // Total added to this pot slice is (number of people who put in >= level) * incrementalAmount
+    pots.push({
+      amount: eligible.length * incrementalAmount,
+      eligible
+    });
+    
+    prevLevel = level;
+  }
+
+  lobby.pots = pots;
+  // Also keep lobby.pot synced for compatibility with existing UI if needed (total sum)
+  lobby.pot = pots.reduce((sum, p) => sum + p.amount, 0);
 }
 
 function sanitizeLobby(lobby) {
@@ -401,7 +436,8 @@ io.on("connection", (socket) => {
 
     const actual = Math.min(amt, player.chips); // clamp to available (all-in)
     player.chips -= actual;
-    lobby.pot += actual;
+    lobby.contributions[player.id] = (lobby.contributions[player.id] || 0) + actual;
+    calculatePots(lobby);
     logAction(lobby, player.name, "raise", actual);
     advanceTurn(lobby);
     await saveLobby(lobby);
@@ -420,7 +456,8 @@ io.on("connection", (socket) => {
 
     const actual = Math.min(amt, player.chips); // all-in cap
     player.chips -= actual;
-    lobby.pot += actual;
+    lobby.contributions[player.id] = (lobby.contributions[player.id] || 0) + actual;
+    calculatePots(lobby);
 
     const isAllIn = actual < amt;
     logAction(lobby, player.name, isAllIn ? "all-in call" : "call", actual);
@@ -435,6 +472,18 @@ io.on("connection", (socket) => {
     if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
+
+    // Mark as non-eligible for all current pots
+    if (lobby.pots) {
+      for (const pot of lobby.pots) {
+        pot.eligible = pot.eligible.filter(id => id !== player.id);
+      }
+    }
+    // Remove from future contribution considerations
+    delete lobby.contributions[player.id];
+    // Re-calculate to adjust any future-facing logic (optional, but keeps state clean)
+    // We don't want to lose the money already in the pot, and calculatePots uses levels.
+    // Actually, folding shouldn't change the pot amounts, only eligibility.
 
     logAction(lobby, player.name, "fold", null);
     advanceTurn(lobby);
@@ -461,7 +510,8 @@ io.on("connection", (socket) => {
       if (blindAmt > 0) {
         const actual = Math.min(blindAmt, player.chips);
         player.chips -= actual;
-        lobby.pot += actual;
+        lobby.contributions[player.id] = (lobby.contributions[player.id] || 0) + actual;
+        calculatePots(lobby);
         logAction(lobby, player.name, "paid blind", actual);
       }
     }
@@ -491,25 +541,44 @@ io.on("connection", (socket) => {
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
 
-    const pot = lobby.pot;
-    player.chips += pot;
-    lobby.pot = 0;
+    // Standard behavior: award ALL pots where this player is eligible
+    let totalWon = 0;
+    const remainingPots = [];
     
-    // Auto-increment round on claim
-    lobby.round += 1;
-    advanceDealer(lobby);
-
-    // Set starting turn: player after new dealer
-    const ordered = getOrderedPlayers(lobby);
-    if (ordered.length > 0) {
-      const n = ordered.length;
-      const startIdx = (lobby.dealerIndex + 1) % n;
-      lobby.currentTurn = ordered[startIdx].id;
-      lobby.turnCount = 0;
+    if (lobby.pots && lobby.pots.length > 0) {
+      for (const pot of lobby.pots) {
+        if (pot.eligible.includes(player.id)) {
+          totalWon += pot.amount;
+        } else {
+          remainingPots.push(pot);
+        }
+      }
+    } else {
+      // Fallback for single pot logic
+      totalWon = lobby.pot;
     }
 
-    logAction(lobby, player.name, "won pot", pot);
-    logAction(lobby, "—", "new round", lobby.round);
+    player.chips += totalWon;
+    lobby.pots = remainingPots;
+    lobby.pot = remainingPots.reduce((sum, p) => sum + p.amount, 0);
+
+    // If no more pots, advance round
+    if (lobby.pot === 0) {
+      lobby.round += 1;
+      advanceDealer(lobby);
+      lobby.contributions = {}; // Reset contributions for new round
+
+      const ordered = getOrderedPlayers(lobby);
+      if (ordered.length > 0) {
+        const n = ordered.length;
+        const startIdx = (lobby.dealerIndex + 1) % n;
+        lobby.currentTurn = ordered[startIdx].id;
+        lobby.turnCount = 0;
+      }
+      logAction(lobby, "—", "new round", lobby.round);
+    }
+
+    logAction(lobby, player.name, "won pot", totalWon);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
@@ -519,35 +588,51 @@ io.on("connection", (socket) => {
     if (!lobby) return socket.emit("error", "Lobby not found");
     if (!playerIds?.length) return socket.emit("error", "No players selected");
 
-    const share = Math.floor(lobby.pot / playerIds.length);
-    const remainder = lobby.pot - share * playerIds.length;
-    const names = [];
-    for (const pid of playerIds) {
-      const p = getPlayerById(lobby, pid);
-      if (p) { p.chips += share; names.push(p.name); }
-    }
-    // Give remainder to first player
-    const first = getPlayerById(lobby, playerIds[0]);
-    if (first) first.chips += remainder;
+    // Award all pots where ANY of the selected players are eligible
+    // Note: Standard rules say if you split a pot, you split ONLY that pot.
+    // For simplicity, we split all currently available pots among the selected players 
+    // IF they are eligible.
     
-    const pot = lobby.pot;
-    lobby.pot = 0;
-
-    // Auto-increment round on split
-    lobby.round += 1;
-    advanceDealer(lobby);
-
-    // Set starting turn: player after new dealer
-    const ordered = getOrderedPlayers(lobby);
-    if (ordered.length > 0) {
-      const n = ordered.length;
-      const startIdx = (lobby.dealerIndex + 1) % n;
-      lobby.currentTurn = ordered[startIdx].id;
-      lobby.turnCount = 0;
+    let totalAwarded = 0;
+    const potsToSplit = lobby.pots && lobby.pots.length > 0 ? [...lobby.pots] : [{ amount: lobby.pot, eligible: playerIds }];
+    const remainingPots = [];
+    
+    for (const pot of potsToSplit) {
+      const eligibleInSelection = playerIds.filter(id => pot.eligible.includes(id));
+      if (eligibleInSelection.length > 0) {
+        const share = Math.floor(pot.amount / eligibleInSelection.length);
+        const remainder = pot.amount % eligibleInSelection.length;
+        
+        eligibleInSelection.forEach((id, idx) => {
+          const p = getPlayerById(lobby, id);
+          if (p) p.chips += share + (idx === 0 ? remainder : 0);
+        });
+        totalAwarded += pot.amount;
+      } else {
+        remainingPots.push(pot);
+      }
     }
 
-    logAction(lobby, names.join(" & "), "split pot", share);
-    logAction(lobby, "—", "new round", lobby.round);
+    lobby.pots = remainingPots;
+    lobby.pot = remainingPots.reduce((sum, p) => sum + p.amount, 0);
+    
+    if (lobby.pot === 0) {
+      lobby.round += 1;
+      advanceDealer(lobby);
+      lobby.contributions = {};
+
+      const ordered = getOrderedPlayers(lobby);
+      if (ordered.length > 0) {
+        const n = ordered.length;
+        const startIdx = (lobby.dealerIndex + 1) % n;
+        lobby.currentTurn = ordered[startIdx].id;
+        lobby.turnCount = 0;
+      }
+      logAction(lobby, "—", "new round", lobby.round);
+    }
+
+    const winners = playerIds.map(id => getPlayerById(lobby, id)?.name).filter(Boolean);
+    logAction(lobby, winners.join(" & "), "split pot", totalAwarded);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
@@ -558,6 +643,9 @@ io.on("connection", (socket) => {
 
     lobby.round += 1;
     advanceDealer(lobby);
+    lobby.contributions = {}; // Clear contributions
+    lobby.pots = []; // Clear pots
+    lobby.pot = 0;
     
     // Set starting turn: player after dealer (SB)
     const ordered = getOrderedPlayers(lobby);
