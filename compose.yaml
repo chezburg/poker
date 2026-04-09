@@ -2,6 +2,7 @@
 
   services:
     redis:
+      container_name: poker-redis
       image: redis:7-alpine
       restart: unless-stopped
       networks:
@@ -11,6 +12,7 @@
       command: redis-server --appendonly yes --save 60 1
 
     server:
+      container_name: pokerserver
       build: ./server
       restart: unless-stopped
       networks:
@@ -28,6 +30,7 @@
         - "3003:3001"
 
     client:
+      container_name: pokerclient
       build:
         context: ./client
         args:
