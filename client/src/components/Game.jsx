@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSocket } from "../hooks/useSocket.js";
 import { getSessionForLobby, saveSession, clearSession } from "../utils/session.js";
+import { safeFetch } from "../utils/api.js";
 import { navigate } from "../App.jsx";
 import PlayerView from "./PlayerView.jsx";
 import TableView from "./TableView.jsx";
@@ -33,9 +34,7 @@ export default function Game({ code }) {
 
     async function init() {
       try {
-        const res = await fetch(`${SERVER_URL}/api/lobbies/${code}`);
-        if (!res.ok) throw new Error("Lobby not found");
-        const data = await res.json();
+        const data = await safeFetch(`${SERVER_URL}/api/lobbies/${code}`);
         setLobby(data.lobby);
         setLoading(false);
       } catch (e) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { navigate } from "../App.jsx";
 import { saveSession, getSessionForLobby } from "../utils/session.js";
+import { safeFetch } from "../utils/api.js";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "";
 
@@ -21,9 +22,7 @@ export default function JoinLobby({ initialCode }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${SERVER_URL}/api/lobbies/${c.toUpperCase()}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Lobby not found");
+      const data = await safeFetch(`${SERVER_URL}/api/lobbies/${c.toUpperCase()}`);
 
       setLobby(data.lobby);
       setCode(c.toUpperCase());
@@ -48,13 +47,11 @@ export default function JoinLobby({ initialCode }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${SERVER_URL}/api/lobbies/${code}/join`, {
+      const data = await safeFetch(`${SERVER_URL}/api/lobbies/${code}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playerName }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to join");
       saveSession(code, data.playerId);
       navigate(`game/${code}`);
     } catch (e) {
@@ -68,13 +65,11 @@ export default function JoinLobby({ initialCode }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${SERVER_URL}/api/lobbies/${code}/join`, {
+      await safeFetch(`${SERVER_URL}/api/lobbies/${code}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ existingPlayerId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to rejoin");
       saveSession(code, existingPlayerId);
       navigate(`game/${code}`);
     } catch (e) {

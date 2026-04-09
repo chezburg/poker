@@ -27,7 +27,13 @@ const io = new Server(server, {
 
 async function getLobby(code) {
   const raw = await redis.get(`lobby:${code}`);
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error(`Failed to parse lobby JSON for code ${code}:`, e);
+    return null;
+  }
 }
 
 async function saveLobby(lobby) {

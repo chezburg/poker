@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { navigate } from "../App.jsx";
 import { saveSession } from "../utils/session.js";
+import { safeFetch } from "../utils/api.js";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "";
 
@@ -29,17 +30,15 @@ export default function CreateLobby() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${SERVER_URL}/api/lobbies`, {
+      const data = await safeFetch(`${SERVER_URL}/api/lobbies`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lobbyName, playerName, settings }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create lobby");
 
       // Apply initial settings update
       const code = data.lobby.code;
-      await fetch(`${SERVER_URL}/api/lobbies/${code}/settings`, {
+      await safeFetch(`${SERVER_URL}/api/lobbies/${code}/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ settings }),
