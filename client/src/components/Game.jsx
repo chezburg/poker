@@ -69,6 +69,11 @@ export default function Game({ code }) {
   // New players joining (not creator) get starting chips on first join via server
   // No client-side chip seeding needed
 
+  function handleStartGame() {
+    emit("action:start_game", { code });
+    showToast("Game started!");
+  }
+
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen error={error} />;
   if (!lobby) return <LoadingScreen />;
@@ -85,7 +90,20 @@ export default function Game({ code }) {
       {/* Header */}
       <div className="header-bar">
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <span style={{ fontWeight: 700, fontSize: 15 }}>{lobby.name}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontWeight: 700, fontSize: 15 }}>{lobby.name}</span>
+            <button 
+              className="btn-ghost" 
+              style={{ padding: "2px 6px", fontSize: 10, minWidth: "auto", height: "auto" }}
+              onClick={() => {
+                const url = window.location.origin + window.location.pathname + "#/join/" + code;
+                navigator.clipboard.writeText(url);
+                showToast("Link copied!");
+              }}
+            >
+              Copy Link
+            </button>
+          </div>
           <span style={{ fontSize: 11, color: "var(--text3)", fontFamily: "monospace", letterSpacing: "0.08em" }}>
             {code}
           </span>
@@ -106,6 +124,14 @@ export default function Game({ code }) {
           <div className={connected ? "connected-dot" : "disconnected-dot"} title={connected ? "Connected" : "Reconnecting…"} />
         </div>
       </div>
+
+      {lobby.phase === "waiting" && (
+        <div style={{ padding: "12px 16px", background: "var(--bg2)", borderBottom: "1px solid var(--border)" }}>
+          <button className="btn-green" onClick={handleStartGame}>
+            Start Game
+          </button>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="tab-bar">

@@ -95,6 +95,20 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
         </div>
       )}
 
+      {/* Total Pot */}
+      <div className="card" style={{ 
+        textAlign: "center", 
+        padding: "20px 16px", 
+        background: "var(--bg3)", 
+        borderColor: "var(--gold)",
+        borderWidth: 1,
+        borderStyle: "solid",
+        boxShadow: "0 0 15px rgba(255, 184, 0, 0.1)"
+      }}>
+        <div style={{ fontSize: 12, color: "var(--text3)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em" }}>Total Pot</div>
+        <div style={{ color: "var(--gold)", fontWeight: 900, fontSize: 32, marginTop: 4 }}>{pot.toLocaleString()}</div>
+      </div>
+
       {/* Chip count */}
       <div className="card" style={{ textAlign: "center", padding: "24px 16px" }}>
         <div className="chip-label">Your chips</div>
