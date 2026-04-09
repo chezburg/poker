@@ -563,6 +563,21 @@ io.on("connection", (socket) => {
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
 
+  socket.on("settings:give_chips", async ({ code, playerId, amount }) => {
+    const lobby = await getLobby(code);
+    if (!lobby) return socket.emit("error", "Lobby not found");
+    const player = getPlayerById(lobby, playerId);
+    if (!player) return socket.emit("error", "Player not found");
+
+    const amt = parseInt(amount);
+    if (isNaN(amt)) return socket.emit("error", "Invalid amount");
+
+    player.chips = Math.max(0, player.chips + amt);
+    logAction(lobby, "Admin", `${amt > 0 ? "gave" : "took"} ${Math.abs(amt)} chips ${amt > 0 ? "to" : "from"} ${player.name}`, null);
+    await saveLobby(lobby);
+    io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
+  });
+
   // ── Disconnect ────────────────────────────────────────────────────────────
 
   socket.on("disconnect", async () => {

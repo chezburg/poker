@@ -127,18 +127,35 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
             </div>
             
             {transferTarget !== "select" && (
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="number"
-                  placeholder={`Amount to give ${transferTarget.name}`}
-                  value={transferAmt}
-                  onChange={(e) => setTransferAmt(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleTransfer()}
-                  style={{ flex: 1 }}
-                  autoFocus
-                />
-                <button className="btn-green btn-sm" onClick={handleTransfer}>Give</button>
-              </div>
+              <>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    placeholder={`Amount to give ${transferTarget.name}`}
+                    value={transferAmt}
+                    onChange={(e) => setTransferAmt(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleTransfer()}
+                    style={{ flex: 1 }}
+                    autoFocus
+                  />
+                  <button className="btn-green btn-sm" onClick={handleTransfer}>Give</button>
+                </div>
+                <div style={{ padding: "8px 4px" }}>
+                  <input
+                    type="range"
+                    min="1"
+                    max={me.chips}
+                    step="1"
+                    value={transferAmt || 0}
+                    onChange={(e) => setTransferAmt(e.target.value)}
+                    style={{ width: "100%", accentColor: "var(--green)" }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text3)", marginTop: 4 }}>
+                    <span>1</span>
+                    <span>{me.chips.toLocaleString()}</span>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -162,20 +179,37 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
           </button>
         </div>
         {showRaiseInput && isMyTurn && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              type="number"
-              placeholder={lobby.settings.raiseMustExceedBigBlind ? `min ${currentBlinds.bigBlind}` : "Amount"}
-              value={raiseAmt}
-              onChange={(e) => setRaiseAmt(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleRaise()}
-              style={{ flex: 1 }}
-              autoFocus
-              min={lobby.settings.raiseMustExceedBigBlind ? currentBlinds.bigBlind : 1}
-              max={me.chips}
-            />
-            <button className="btn-gold btn-sm" onClick={handleRaise}>Raise</button>
-          </div>
+          <>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="number"
+                placeholder={lobby.settings.raiseMustExceedBigBlind ? `min ${currentBlinds.bigBlind}` : "Amount"}
+                value={raiseAmt}
+                onChange={(e) => setRaiseAmt(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleRaise()}
+                style={{ flex: 1 }}
+                autoFocus
+                min={lobby.settings.raiseMustExceedBigBlind ? currentBlinds.bigBlind : 1}
+                max={me.chips}
+              />
+              <button className="btn-gold btn-sm" onClick={handleRaise}>Raise</button>
+            </div>
+            <div style={{ padding: "8px 4px" }}>
+              <input
+                type="range"
+                min={lobby.settings.raiseMustExceedBigBlind ? currentBlinds.bigBlind : 1}
+                max={me.chips}
+                step="1"
+                value={raiseAmt || (lobby.settings.raiseMustExceedBigBlind ? currentBlinds.bigBlind : 1)}
+                onChange={(e) => setRaiseAmt(e.target.value)}
+                style={{ width: "100%", accentColor: "var(--gold)" }}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text3)", marginTop: 4 }}>
+                <span>Min</span>
+                <span>Max ({me.chips.toLocaleString()})</span>
+              </div>
+            </div>
+          </>
         )}
         {showRaiseInput && isMyTurn && me.chips > 0 && (
           <button

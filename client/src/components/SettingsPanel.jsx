@@ -256,7 +256,7 @@ export default function SettingsPanel({ lobby, me, emit, code, showToast }) {
                   </div>
                   {chipAdjPlayer === p.id && (
                     <div style={{ padding: "8px 0 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <input
                           type="number"
                           placeholder="e.g. 500 or -200"
@@ -269,6 +269,17 @@ export default function SettingsPanel({ lobby, me, emit, code, showToast }) {
                         <button className="btn-secondary btn-sm" onClick={() => handleChipAdj(p.id, chipAdjAmt)}>
                           Apply
                         </button>
+                      </div>
+                      <div style={{ padding: "4px 4px" }}>
+                        <input
+                          type="range"
+                          min={-p.chips}
+                          max={Math.max(5000, p.chips)}
+                          step="1"
+                          value={chipAdjAmt || 0}
+                          onChange={(e) => setChipAdjAmt(e.target.value)}
+                          style={{ width: "100%", accentColor: "var(--blue)" }}
+                        />
                       </div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {[100, 500, 1000, -100, -500].map((quick) => (
