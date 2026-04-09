@@ -57,8 +57,25 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
   const isSB = blinds?.smallBlind?.id === me.id;
   const isBB = blinds?.bigBlind?.id === me.id;
 
+  const isMyTurn = lobby.currentTurn === me.id;
+  const currentPlayer = lobby.players.find(p => p.id === lobby.currentTurn);
+
   return (
     <div className="page" style={{ paddingBottom: 24 }}>
+      {/* Turn indicator */}
+      <div className="card" style={{ 
+        background: isMyTurn ? "var(--blue-bg)" : "var(--bg2)", 
+        borderColor: isMyTurn ? "var(--blue)" : "var(--border)",
+        textAlign: "center",
+        padding: "12px"
+      }}>
+        {isMyTurn ? (
+          <div style={{ color: "var(--blue)", fontWeight: 700 }}>★ Your Turn</div>
+        ) : (
+          <div className="small">Waiting for <strong>{currentPlayer?.name || "someone"}</strong>…</div>
+        )}
+      </div>
+
       {/* Blind badges */}
       {lobby.settings.blindsMode && blinds && (isDealer || isSB || isBB) && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -123,17 +140,18 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
       </div>
 
       {/* Call */}
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10, opacity: !isMyTurn ? 0.6 : 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontWeight: 600 }}>Call</div>
           <button
             className="btn-secondary btn-sm"
             onClick={() => { setShowCallInput(!showCallInput); setShowRaiseInput(false); setTransferTarget(null); }}
+            disabled={!isMyTurn}
           >
             Enter amount
           </button>
         </div>
-        {showCallInput && (
+        {showCallInput && isMyTurn && (
           <div style={{ display: "flex", gap: 8 }}>
             <input
               type="number"
@@ -149,7 +167,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
             <button className="btn-secondary btn-sm" onClick={handleCall}>Call</button>
           </div>
         )}
-        {showCallInput && me.chips > 0 && (
+        {showCallInput && isMyTurn && me.chips > 0 && (
           <button
             className="btn-sm"
             style={{ background: "var(--red-bg)", color: "var(--red)", border: "1px solid var(--red)", borderColor: "#ef444433" }}
@@ -165,7 +183,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
       </div>
 
       {/* Raise */}
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10, opacity: !isMyTurn ? 0.6 : 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontWeight: 600 }}>Raise</div>
@@ -176,11 +194,12 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
           <button
             className="btn-gold btn-sm"
             onClick={() => { setShowRaiseInput(!showRaiseInput); setShowCallInput(false); setTransferTarget(null); }}
+            disabled={!isMyTurn}
           >
             Enter amount
           </button>
         </div>
-        {showRaiseInput && (
+        {showRaiseInput && isMyTurn && (
           <div style={{ display: "flex", gap: 8 }}>
             <input
               type="number"
@@ -196,7 +215,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
             <button className="btn-gold btn-sm" onClick={handleRaise}>Raise</button>
           </div>
         )}
-        {showRaiseInput && me.chips > 0 && (
+        {showRaiseInput && isMyTurn && me.chips > 0 && (
           <button
             className="btn-sm"
             style={{ background: "var(--red-bg)", color: "var(--red)", border: "1px solid #ef444433" }}
@@ -211,18 +230,31 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
         )}
       </div>
 
-      {/* Check / Fold */}
+      {/* Check / Fold / Claim */}
       <div className="btn-row">
-        <button className="btn-secondary" onClick={() => { doAction("action:check"); showToast("Check"); }}>
+        <button 
+          className="btn-secondary" 
+          onClick={() => { doAction("action:check"); showToast("Check"); }}
+          disabled={!isMyTurn}
+        >
           Check
         </button>
         <button
           className="btn-secondary"
           style={{ color: "var(--text3)" }}
           onClick={() => { doAction("action:fold"); showToast("Fold"); }}
+          disabled={!isMyTurn}
         >
           Fold
         </button>
+        {pot > 0 && isMyTurn && (
+          <button
+            className="btn-gold"
+            onClick={() => { doAction("action:win_pot"); showToast("Claimed pot!"); }}
+          >
+            Claim Pot
+          </button>
+        )}
       </div>
 
       {/* Cash Out */}

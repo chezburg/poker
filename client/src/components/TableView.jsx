@@ -68,8 +68,8 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
           const isMe = p.id === me.id;
 
           return (
-            <div key={p.id} className={`player-row ${p.connected ? "" : "player-offline"}`}>
-              <div className="player-avatar">{p.name[0].toUpperCase()}</div>
+            <div key={p.id} className={`player-row ${p.connected ? "" : "player-offline"} ${lobby.currentTurn === p.id ? "active" : ""}`}>
+              <div className="player-avatar" style={{ border: lobby.currentTurn === p.id ? "2px solid var(--blue)" : undefined }}>{p.name[0].toUpperCase()}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span className={`player-name ${isMe ? "you" : ""}`}>

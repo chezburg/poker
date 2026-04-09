@@ -134,6 +134,8 @@ function createLobby(name, creatorName) {
     players: [creator],
     pot: 0,
     dealerIndex: 0,
+    currentTurn: creator.id,
+    turnCount: 0,
     settings,
     actionLog: [],
   };
@@ -146,16 +148,33 @@ function getPlayerById(lobby, playerId) {
 function getOrderedPlayers(lobby) {
   const order = lobby.settings.tableOrder;
   if (!order || order.length === 0) return lobby.players;
+  const map = Object.fromEntries(lobby.players.map(p => [p.id, p]));
   const ordered = [];
   for (const id of order) {
-    const p = lobby.players.find((p) => p.id === id);
-    if (p) ordered.push(p);
+    if (map[id]) ordered.push(map[id]);
   }
   // append any players not yet in tableOrder
   for (const p of lobby.players) {
     if (!order.includes(p.id)) ordered.push(p);
   }
   return ordered;
+}
+
+function advanceTurn(lobby) {
+  const ordered = getOrderedPlayers(lobby);
+  if (ordered.length === 0) return;
+
+  const currentIdx = ordered.findIndex((p) => p.id === lobby.currentTurn);
+  // Find next connected player
+  let nextIdx = (currentIdx + 1) % ordered.length;
+  let attempts = 0;
+  while (!ordered[nextIdx].connected && attempts < ordered.length) {
+    nextIdx = (nextIdx + 1) % ordered.length;
+    attempts++;
+  }
+  
+  lobby.currentTurn = ordered[nextIdx].id;
+  lobby.turnCount += 1;
 }
 
 function getBlinds(lobby) {
@@ -367,6 +386,7 @@ io.on("connection", (socket) => {
   socket.on("action:raise", async ({ code, playerId, amount }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
 
@@ -383,6 +403,7 @@ io.on("connection", (socket) => {
     player.chips -= actual;
     lobby.pot += actual;
     logAction(lobby, player.name, "raise", actual);
+    advanceTurn(lobby);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
@@ -390,6 +411,7 @@ io.on("connection", (socket) => {
   socket.on("action:call", async ({ code, playerId, amount }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
 
@@ -402,6 +424,7 @@ io.on("connection", (socket) => {
 
     const isAllIn = actual < amt;
     logAction(lobby, player.name, isAllIn ? "all-in call" : "call", actual);
+    advanceTurn(lobby);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
@@ -409,10 +432,12 @@ io.on("connection", (socket) => {
   socket.on("action:fold", async ({ code, playerId }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
 
     logAction(lobby, player.name, "fold", null);
+    advanceTurn(lobby);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
@@ -420,10 +445,29 @@ io.on("connection", (socket) => {
   socket.on("action:check", async ({ code, playerId }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
 
+    // "Turn 1" Blind Logic: first rotation through table
+    const ordered = getOrderedPlayers(lobby);
+    if (lobby.turnCount < ordered.length && lobby.settings.blindsMode) {
+      const blinds = getBlinds(lobby);
+      const currentBlinds = computeCurrentBlinds(lobby);
+      let blindAmt = 0;
+      if (player.id === blinds.smallBlind?.id) blindAmt = currentBlinds.smallBlind;
+      else if (player.id === blinds.bigBlind?.id) blindAmt = currentBlinds.bigBlind;
+      
+      if (blindAmt > 0) {
+        const actual = Math.min(blindAmt, player.chips);
+        player.chips -= actual;
+        lobby.pot += actual;
+        logAction(lobby, player.name, "paid blind", actual);
+      }
+    }
+
     logAction(lobby, player.name, "check", null);
+    advanceTurn(lobby);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
@@ -450,6 +494,8 @@ io.on("connection", (socket) => {
     const pot = lobby.pot;
     player.chips += pot;
     lobby.pot = 0;
+    lobby.turnCount = 0;
+    lobby.currentTurn = player.id; // Winner acts first next round? Or reset to dealer? 
     logAction(lobby, player.name, "won pot", pot);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
@@ -471,6 +517,7 @@ io.on("connection", (socket) => {
     const first = getPlayerById(lobby, playerIds[0]);
     if (first) first.chips += remainder;
     lobby.pot = 0;
+    lobby.turnCount = 0;
     logAction(lobby, names.join(" & "), "split pot", share);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
@@ -482,6 +529,16 @@ io.on("connection", (socket) => {
 
     lobby.round += 1;
     advanceDealer(lobby);
+    
+    // Set starting turn: player after dealer (SB)
+    const ordered = getOrderedPlayers(lobby);
+    if (ordered.length > 0) {
+      const n = ordered.length;
+      const startIdx = (lobby.dealerIndex + 1) % n;
+      lobby.currentTurn = ordered[startIdx].id;
+      lobby.turnCount = 0;
+    }
+
     logAction(lobby, "—", "new round", lobby.round);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
