@@ -2,10 +2,8 @@ import { useState } from "react";
 
 export default function PlayerView({ lobby, me, emit, code, showToast }) {
   const [raiseAmt, setRaiseAmt] = useState("");
-  const [callAmt, setCallAmt] = useState("");
   const [transferAmt, setTransferAmt] = useState("");
   const [transferTarget, setTransferTarget] = useState(null);
-  const [showCallInput, setShowCallInput] = useState(false);
   const [showRaiseInput, setShowRaiseInput] = useState(false);
   const [showCashOut, setShowCashOut] = useState(false);
 
@@ -37,13 +35,20 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
     showToast(`Gave ${amt.toLocaleString()} chips to ${transferTarget.name}`);
   }
 
-  function handleCall() {
-    const amt = parseInt(callAmt);
-    if (!amt || amt <= 0) return showToast("Enter a valid amount", "error");
-    const actual = Math.min(amt, me.chips);
-    doAction("action:call", { amount: actual });
-    setCallAmt("");
-    setShowCallInput(false);
+  const lastRaise = lobby.actionLog?.find(
+    (e) => e.round === lobby.round && e.action === "raise"
+  );
+  const amountToCall = (lastRaise && lastRaise.playerName !== me.name) ? lastRaise.amount : 0;
+
+  function handleCheckOrCall() {
+    if (amountToCall > 0) {
+      const actual = Math.min(amountToCall, me.chips);
+      doAction("action:call", { amount: actual });
+      showToast(actual < amountToCall ? "All In!" : `Called ${actual.toLocaleString()}`);
+    } else {
+      doAction("action:check");
+      showToast("Check");
+    }
   }
 
   function handleCashOut() {
@@ -101,7 +106,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
           <div style={{ fontWeight: 600 }}>Give Chips</div>
           <button
             className="btn-green btn-sm"
-            onClick={() => { setTransferTarget(transferTarget ? null : "select"); setShowRaiseInput(false); setShowCallInput(false); }}
+            onClick={() => { setTransferTarget(transferTarget ? null : "select"); setShowRaiseInput(false); }}
           >
             Send chips…
           </button>
@@ -139,49 +144,6 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
         )}
       </div>
 
-      {/* Call */}
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10, opacity: !isMyTurn ? 0.6 : 1 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontWeight: 600 }}>Call</div>
-          <button
-            className="btn-secondary btn-sm"
-            onClick={() => { setShowCallInput(!showCallInput); setShowRaiseInput(false); setTransferTarget(null); }}
-            disabled={!isMyTurn}
-          >
-            Enter amount
-          </button>
-        </div>
-        {showCallInput && isMyTurn && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              type="number"
-              placeholder="Amount to call"
-              value={callAmt}
-              onChange={(e) => setCallAmt(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCall()}
-              style={{ flex: 1 }}
-              autoFocus
-              min={1}
-              max={me.chips}
-            />
-            <button className="btn-secondary btn-sm" onClick={handleCall}>Call</button>
-          </div>
-        )}
-        {showCallInput && isMyTurn && me.chips > 0 && (
-          <button
-            className="btn-sm"
-            style={{ background: "var(--red-bg)", color: "var(--red)", border: "1px solid var(--red)", borderColor: "#ef444433" }}
-            onClick={() => {
-              doAction("action:call", { amount: me.chips });
-              setShowCallInput(false);
-              setCallAmt("");
-            }}
-          >
-            All In · {me.chips.toLocaleString()}
-          </button>
-        )}
-      </div>
-
       {/* Raise */}
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10, opacity: !isMyTurn ? 0.6 : 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -193,7 +155,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
           </div>
           <button
             className="btn-gold btn-sm"
-            onClick={() => { setShowRaiseInput(!showRaiseInput); setShowCallInput(false); setTransferTarget(null); }}
+            onClick={() => { setShowRaiseInput(!showRaiseInput); setTransferTarget(null); }}
             disabled={!isMyTurn}
           >
             Enter amount
@@ -233,11 +195,13 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
       {/* Check / Fold / Claim */}
       <div className="btn-row">
         <button 
-          className="btn-secondary" 
-          onClick={() => { doAction("action:check"); showToast("Check"); }}
+          className={amountToCall > 0 ? "btn-primary" : "btn-secondary"} 
+          onClick={handleCheckOrCall}
           disabled={!isMyTurn}
         >
-          Check
+          {amountToCall > 0 ? (
+            amountToCall >= me.chips ? `All In · ${me.chips.toLocaleString()}` : `Call · ${amountToCall.toLocaleString()}`
+          ) : "Check"}
         </button>
         <button
           className="btn-secondary"
