@@ -96,7 +96,6 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
         <div className="chip-count big" style={{ marginTop: 4 }}>{me.chips.toLocaleString()}</div>
         <div style={{ marginTop: 8, display: "flex", gap: 16, justifyContent: "center" }}>
           <span className="small">Starting chips: <strong style={{ color: "var(--text)" }}>{lobby.settings.startingChips.toLocaleString()}</strong></span>
-          <span className="small">Pot: <strong style={{ color: "var(--gold)" }}>{pot.toLocaleString()}</strong></span>
         </div>
       </div>
 

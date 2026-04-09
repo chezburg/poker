@@ -84,6 +84,10 @@ export default function Game({ code }) {
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", marginRight: 8 }}>
+            <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", fontWeight: 700 }}>Pot</span>
+            <span style={{ color: "var(--gold)", fontWeight: 800, fontSize: 16 }}>{lobby.pot.toLocaleString()}</span>
+          </div>
           <span className="round-badge">Round {lobby.round}</span>
           <div className={connected ? "connected-dot" : "disconnected-dot"} title={connected ? "Connected" : "Reconnecting…"} />
         </div>

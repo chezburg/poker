@@ -34,63 +34,21 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
 
   return (
     <div className="page" style={{ paddingBottom: 24 }}>
-      {/* Pot */}
-      <div className="pot-box">
-        <div className="chip-label">Pot</div>
-        <div className="chip-count big">{pot.toLocaleString()}</div>
+      {/* Action Buttons */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
         {pot > 0 && (
           <button
-            className="btn-sm btn-gold"
-            style={{ marginTop: 8 }}
+            className="btn-gold"
+            style={{ flex: 1 }}
             onClick={() => { setShowWinModal(true); setSplitIds([]); }}
           >
-            Award Pot
+            Award Pot ({pot.toLocaleString()})
           </button>
         )}
+        <button className="btn-primary" onClick={handleNextRound} style={{ flex: 1 }}>
+          Force Next Round →
+        </button>
       </div>
-
-      {/* Blinds info */}
-      {lobby.settings.blindsMode && blinds && (
-        <div className="card" style={{ display: "flex", gap: 12, justifyContent: "space-around" }}>
-          <BlindInfo label="Dealer" name={blinds.dealer?.name} color="var(--gold)" />
-          <BlindInfo label={`SB · ${currentBlinds.smallBlind}`} name={blinds.smallBlind?.name} color="var(--blue)" />
-          <BlindInfo label={`BB · ${currentBlinds.bigBlind}`} name={blinds.bigBlind?.name} color="var(--purple)" />
-        </div>
-      )}
-
-      {/* Players */}
-      <div className="card" style={{ padding: "4px 16px" }}>
-        <div className="section-title" style={{ padding: "12px 0 4px" }}>Players</div>
-        {orderedPlayers.map((p, i) => {
-          const isDealer = blinds?.dealer?.id === p.id;
-          const isSB = blinds?.smallBlind?.id === p.id;
-          const isBB = blinds?.bigBlind?.id === p.id;
-          const isMe = p.id === me.id;
-
-          return (
-            <div key={p.id} className={`player-row ${p.connected ? "" : "player-offline"} ${lobby.currentTurn === p.id ? "active" : ""}`}>
-              <div className="player-avatar" style={{ border: lobby.currentTurn === p.id ? "2px solid var(--blue)" : undefined }}>{p.name[0].toUpperCase()}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span className={`player-name ${isMe ? "you" : ""}`}>
-                    {p.name}{isMe ? " (you)" : ""}
-                  </span>
-                  {lobby.settings.blindsMode && isDealer && <span className="badge badge-dealer">D</span>}
-                  {lobby.settings.blindsMode && isSB && <span className="badge badge-sb">SB</span>}
-                  {lobby.settings.blindsMode && isBB && <span className="badge" style={{ background: "var(--purple)", color: "#fff", fontSize: 10, padding: "2px 6px", borderRadius: 99 }}>BB</span>}
-                  {!p.connected && <span className="badge badge-offline">away</span>}
-                </div>
-              </div>
-              <div className="player-chips">{p.chips.toLocaleString()}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Next round */}
-      <button className="btn-primary" onClick={handleNextRound} style={{ marginTop: 4 }}>
-        Next Round →
-      </button>
       <div className="small" style={{ textAlign: "center" }}>
         Blinds: {currentBlinds.smallBlind} / {currentBlinds.bigBlind}
       </div>

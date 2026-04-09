@@ -494,9 +494,22 @@ io.on("connection", (socket) => {
     const pot = lobby.pot;
     player.chips += pot;
     lobby.pot = 0;
-    lobby.turnCount = 0;
-    lobby.currentTurn = player.id; // Winner acts first next round? Or reset to dealer? 
+    
+    // Auto-increment round on claim
+    lobby.round += 1;
+    advanceDealer(lobby);
+
+    // Set starting turn: player after new dealer
+    const ordered = getOrderedPlayers(lobby);
+    if (ordered.length > 0) {
+      const n = ordered.length;
+      const startIdx = (lobby.dealerIndex + 1) % n;
+      lobby.currentTurn = ordered[startIdx].id;
+      lobby.turnCount = 0;
+    }
+
     logAction(lobby, player.name, "won pot", pot);
+    logAction(lobby, "—", "new round", lobby.round);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
@@ -516,9 +529,25 @@ io.on("connection", (socket) => {
     // Give remainder to first player
     const first = getPlayerById(lobby, playerIds[0]);
     if (first) first.chips += remainder;
+    
+    const pot = lobby.pot;
     lobby.pot = 0;
-    lobby.turnCount = 0;
+
+    // Auto-increment round on split
+    lobby.round += 1;
+    advanceDealer(lobby);
+
+    // Set starting turn: player after new dealer
+    const ordered = getOrderedPlayers(lobby);
+    if (ordered.length > 0) {
+      const n = ordered.length;
+      const startIdx = (lobby.dealerIndex + 1) % n;
+      lobby.currentTurn = ordered[startIdx].id;
+      lobby.turnCount = 0;
+    }
+
     logAction(lobby, names.join(" & "), "split pot", share);
+    logAction(lobby, "—", "new round", lobby.round);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
