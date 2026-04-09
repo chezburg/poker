@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3001;
 const LOBBY_TIMEOUT_HOURS = parseInt(process.env.LOBBY_TIMEOUT_HOURS || "24");
 const MAX_LOBBIES = parseInt(process.env.MAX_LOBBIES || "3");
 const LOBBY_TTL = LOBBY_TIMEOUT_HOURS * 3600;
+const STALE_THRESHOLD = 30 * 60 * 1000; // 30 minutes
 
 const redis = new Redis(REDIS_URL);
 
@@ -63,6 +64,30 @@ async function countActiveLobbies() {
     else await redis.srem("lobbyindex", code);
   }
   return count;
+}
+
+async function cleanStaleLobbies() {
+  const codes = await listLobbyCodes();
+  const now = Date.now();
+
+  for (const code of codes) {
+    const lobby = await getLobby(code);
+    if (!lobby) {
+      await redis.srem("lobbyindex", code);
+      continue;
+    }
+
+    const hasActivePlayers = lobby.players.some((p) => p.connected);
+    if (!hasActivePlayers) {
+      const lastSeen = Math.max(
+        ...lobby.players.map((p) => p.lastSeen || 0),
+        lobby.createdAt || 0
+      );
+      if (now - lastSeen > STALE_THRESHOLD || lobby.players.length === 0) {
+        await deleteLobby(code);
+      }
+    }
+  }
 }
 
 // ─── Game logic helpers ───────────────────────────────────────────────────────
@@ -213,7 +238,11 @@ app.post("/api/lobbies", async (req, res) => {
     const { lobbyName, playerName, settings: initSettings } = req.body;
     if (!lobbyName?.trim() || !playerName?.trim()) return res.status(400).json({ error: "Missing fields" });
 
-    const count = await countActiveLobbies();
+    let count = await countActiveLobbies();
+    if (count >= MAX_LOBBIES) {
+      await cleanStaleLobbies();
+      count = await countActiveLobbies();
+    }
     if (count >= MAX_LOBBIES) return res.status(429).json({ error: `Max ${MAX_LOBBIES} lobbies active at once` });
 
     const lobby = createLobby(lobbyName.trim(), playerName.trim());
@@ -492,14 +521,5 @@ io.on("connection", (socket) => {
     }
   });
 });
-
-// ─── Cleanup job ──────────────────────────────────────────────────────────────
-setInterval(async () => {
-  const codes = await listLobbyCodes();
-  for (const code of codes) {
-    const exists = await redis.exists(`lobby:${code}`);
-    if (!exists) await redis.srem("lobbyindex", code);
-  }
-}, 60 * 60 * 1000); // hourly
 
 server.listen(PORT, () => console.log(`Server running on :${PORT}`));
