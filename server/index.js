@@ -212,24 +212,18 @@ function getBlinds(lobby) {
   if (n < 2) return null;
 
   const dealerIdx = lobby.dealerIndex % n;
-  if (n === 2) {
-    // Heads up: Dealer is SB, other is BB. Action starts with SB (Dealer) pre-flop.
-    return {
-      dealer: ordered[dealerIdx],
-      smallBlind: ordered[dealerIdx],
-      bigBlind: ordered[(dealerIdx + 1) % n],
-    };
-  } else {
-    // 3+ players: Dealer, SB (Dealer+1), BB (Dealer+2)
-    return {
-      dealer: ordered[dealerIdx],
-      smallBlind: ordered[(dealerIdx + 1) % n],
-      bigBlind: ordered[(dealerIdx + 2) % n],
-    };
-  }
+  // Standard non-heads-up: Dealer, SB (Dealer+1), BB (Dealer+2)
+  // We'll simplify and use this even for heads-up if user wants to remove special dealer handling.
+  return {
+    smallBlind: ordered[(dealerIdx + 1) % n],
+    bigBlind: ordered[(dealerIdx + 2) % n],
+  };
 }
 
 function startNewRound(lobby) {
+  // Prevent double-initialization if already in progress
+  if (Object.keys(lobby.contributions || {}).length > 0 && lobby.turnCount === 0) return;
+
   lobby.round += 1;
   advanceDealer(lobby);
   lobby.contributions = {};
@@ -263,9 +257,7 @@ function startNewRound(lobby) {
 
     calculatePots(lobby);
 
-    // Turn starts after BB
-    // In heads-up (n=2), BB is index (dealerIdx + 1). Next is dealerIdx (the SB).
-    // In 3+ players, BB is index (dealerIdx + 2). Next is (dealerIdx + 3).
+    // Turn starts after BB (UTG)
     const bbIdx = ordered.findIndex(p => p.id === blinds.bigBlind.id);
     const startIdx = (bbIdx + 1) % n;
     lobby.currentTurn = ordered[startIdx].id;
