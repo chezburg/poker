@@ -159,15 +159,18 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
                   <button className="btn-green btn-sm" onClick={handleTransfer}>Give</button>
                 </div>
                 <div style={{ padding: "8px 4px" }}>
-                <input
-                  type="range"
-                  min="1"
-                  max={me.chips}
-                  step="5"
-                  value={transferAmt || 0}
-                  onChange={(e) => setTransferAmt(e.target.value)}
-                  style={{ width: "100%", accentColor: "var(--green)" }}
-                />
+                  <input
+                    type="range"
+                    min="0"
+                    max={me.chips}
+                    step="5"
+                    value={transferAmt || 0}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setTransferAmt(val === 0 ? 1 : val);
+                    }}
+                    style={{ width: "100%", accentColor: "var(--green)" }}
+                  />
 
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text3)", marginTop: 4 }}>
                     <span>1</span>

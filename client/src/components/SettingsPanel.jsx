@@ -273,11 +273,11 @@ export default function SettingsPanel({ lobby, me, emit, code, showToast }) {
                       <div style={{ padding: "4px 4px" }}>
                         <input
                           type="range"
-                          min={-p.chips}
+                          min={Math.floor(-p.chips / 5) * 5}
                           max={Math.max(5000, p.chips)}
                           step="5"
                           value={chipAdjAmt || 0}
-                          onChange={(e) => setChipAdjAmt(e.target.value)}
+                          onChange={(e) => setChipAdjAmt(parseInt(e.target.value))}
                           style={{ width: "100%", accentColor: "var(--blue)" }}
                         />
                       </div>
