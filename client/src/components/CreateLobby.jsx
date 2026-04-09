@@ -36,14 +36,7 @@ export default function CreateLobby() {
         body: JSON.stringify({ lobbyName, playerName, settings }),
       });
 
-      // Apply initial settings update
       const code = data.lobby.code;
-      await safeFetch(`${SERVER_URL}/api/lobbies/${code}/settings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings }),
-      }).catch(() => {});
-
       saveSession(code, data.playerId);
 
       // Give starting chips to creator via REST before navigating
