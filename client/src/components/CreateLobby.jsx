@@ -10,9 +10,8 @@ export default function CreateLobby() {
   const [playerName, setPlayerName] = useState("");
   const [settings, setSettings] = useState({
     startingChips: 1000,
-    buyInAmount: 100,
-    roundsUntilDoubleBuyIn: 0,
-    raiseMustExceedBuyIn: false,
+    roundsUntilDoubleBlinds: 0,
+    raiseMustExceedBigBlind: true,
     blindsMode: false,
     smallBlind: 10,
     bigBlind: 20,
@@ -87,28 +86,23 @@ export default function CreateLobby() {
             onChange={(v) => setSetting("startingChips", v)}
             min={100} step={100}
           />
-          <NumberField
-            label="Buy-in amount"
-            value={settings.buyInAmount}
-            onChange={(v) => setSetting("buyInAmount", v)}
-            min={10} step={10}
-          />
         </div>
 
         <div className="section-title">Rules</div>
         <div className="card" style={{ display: "flex", flexDirection: "column" }}>
           <NumberField
-            label="Rounds until buy-in doubles"
+            label="Rounds until blinds double"
             sublabel="Set to 0 to disable"
-            value={settings.roundsUntilDoubleBuyIn}
-            onChange={(v) => setSetting("roundsUntilDoubleBuyIn", v)}
+            value={settings.roundsUntilDoubleBlinds}
+            onChange={(v) => setSetting("roundsUntilDoubleBlinds", v)}
             min={0} step={1}
           />
           <hr className="divider" style={{ margin: "12px 0" }} />
           <ToggleRow
-            label="Raise must exceed buy-in"
-            checked={settings.raiseMustExceedBuyIn}
-            onChange={(v) => setSetting("raiseMustExceedBuyIn", v)}
+            label="Raise must meet minimum"
+            sublabel="Minimum = Big Blind (or Small Blind if simple)"
+            checked={settings.raiseMustExceedBigBlind}
+            onChange={(v) => setSetting("raiseMustExceedBigBlind", v)}
           />
           <hr className="divider" />
           <ToggleRow

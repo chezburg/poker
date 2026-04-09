@@ -7,7 +7,8 @@ export default function ActionLog({ lobby }) {
   }
 
   function actionColor(action) {
-    if (action === "buy-in") return "var(--green)";
+    if (action === "starting chips") return "var(--blue)";
+    if (action.includes("gave")) return "var(--green)";
     if (action === "cash-out") return "var(--red)";
     if (action === "raise") return "var(--gold)";
     if (action === "won pot" || action === "split pot") return "var(--green)";

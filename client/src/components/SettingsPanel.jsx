@@ -124,27 +124,23 @@ export default function SettingsPanel({ lobby, me, emit, code, showToast }) {
                 onChange={(v) => setSetting("startingChips", v)}
                 min={100} step={100}
               />
-              <NumberField
-                label="Buy-in amount"
-                value={settings.buyInAmount}
-                onChange={(v) => setSetting("buyInAmount", v)}
-                min={10} step={10}
-              />
             </div>
 
-            <div className="section-title">Buy-in Doubling</div>
+            <div className="section-title">Blinds Doubling</div>
             <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <NumberField
-                label="Rounds until buy-in doubles"
+                label="Rounds until blinds double"
                 sublabel="0 = disabled"
-                value={settings.roundsUntilDoubleBuyIn}
-                onChange={(v) => setSetting("roundsUntilDoubleBuyIn", v)}
+                value={settings.roundsUntilDoubleBlinds}
+                onChange={(v) => setSetting("roundsUntilDoubleBlinds", v)}
                 min={0} step={1}
               />
               <div className="small" style={{ color: "var(--text3)" }}>
-                Current buy-in: <strong style={{ color: "var(--gold)" }}>{lobby.currentBuyInAmount?.toLocaleString()}</strong>
-                {settings.roundsUntilDoubleBuyIn > 0 && (
-                  <> · doubles every {settings.roundsUntilDoubleBuyIn} round{settings.roundsUntilDoubleBuyIn !== 1 ? "s" : ""}</>
+                Current blinds: <strong style={{ color: "var(--gold)" }}>
+                  {lobby.currentBlinds?.smallBlind?.toLocaleString()} / {lobby.currentBlinds?.bigBlind?.toLocaleString()}
+                </strong>
+                {settings.roundsUntilDoubleBlinds > 0 && (
+                  <> · doubles every {settings.roundsUntilDoubleBlinds} round{settings.roundsUntilDoubleBlinds !== 1 ? "s" : ""}</>
                 )}
               </div>
             </div>
@@ -152,9 +148,10 @@ export default function SettingsPanel({ lobby, me, emit, code, showToast }) {
             <div className="section-title">Rules</div>
             <div className="card" style={{ display: "flex", flexDirection: "column" }}>
               <ToggleRow
-                label="Raise must exceed buy-in"
-                checked={settings.raiseMustExceedBuyIn}
-                onChange={(v) => setSetting("raiseMustExceedBuyIn", v)}
+                label="Raise must meet minimum"
+                sublabel="Minimum = Big Blind (or Small Blind if simple)"
+                checked={settings.raiseMustExceedBigBlind}
+                onChange={(v) => setSetting("raiseMustExceedBigBlind", v)}
               />
               <hr className="divider" />
               <ToggleRow

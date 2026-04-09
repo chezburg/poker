@@ -5,6 +5,7 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
   const [splitIds, setSplitIds] = useState([]);
 
   const orderedPlayers = getOrderedPlayers(lobby);
+  const currentBlinds = lobby.currentBlinds || { smallBlind: lobby.settings.smallBlind, bigBlind: lobby.settings.bigBlind };
   const blinds = lobby.blinds;
   const pot = lobby.pot;
 
@@ -52,8 +53,8 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
       {lobby.settings.blindsMode && blinds && (
         <div className="card" style={{ display: "flex", gap: 12, justifyContent: "space-around" }}>
           <BlindInfo label="Dealer" name={blinds.dealer?.name} color="var(--gold)" />
-          <BlindInfo label={`SB · ${lobby.settings.smallBlind}`} name={blinds.smallBlind?.name} color="var(--blue)" />
-          <BlindInfo label={`BB · ${lobby.settings.bigBlind}`} name={blinds.bigBlind?.name} color="var(--purple)" />
+          <BlindInfo label={`SB · ${currentBlinds.smallBlind}`} name={blinds.smallBlind?.name} color="var(--blue)" />
+          <BlindInfo label={`BB · ${currentBlinds.bigBlind}`} name={blinds.bigBlind?.name} color="var(--purple)" />
         </div>
       )}
 
@@ -79,7 +80,6 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
                   {lobby.settings.blindsMode && isBB && <span className="badge" style={{ background: "var(--purple)", color: "#fff", fontSize: 10, padding: "2px 6px", borderRadius: 99 }}>BB</span>}
                   {!p.connected && <span className="badge badge-offline">away</span>}
                 </div>
-                <div className="small">Bought in: {p.totalBoughtIn.toLocaleString()}</div>
               </div>
               <div className="player-chips">{p.chips.toLocaleString()}</div>
             </div>
@@ -92,7 +92,7 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
         Next Round →
       </button>
       <div className="small" style={{ textAlign: "center" }}>
-        Buy-in this round: {lobby.currentBuyInAmount.toLocaleString()} chips
+        Blinds: {currentBlinds.smallBlind} / {currentBlinds.bigBlind}
       </div>
 
       {/* Award pot modal */}

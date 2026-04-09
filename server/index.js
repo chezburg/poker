@@ -85,9 +85,8 @@ function createPlayer(name) {
 function defaultSettings() {
   return {
     startingChips: 1000,
-    buyInAmount: 100,
-    roundsUntilDoubleBuyIn: 0, // 0 = disabled
-    raiseMustExceedBuyIn: false,
+    roundsUntilDoubleBlinds: 0, // 0 = disabled
+    raiseMustExceedBigBlind: true,
     blindsMode: false, // false = simple, true = blinds
     smallBlind: 10,
     bigBlind: 20,
@@ -109,7 +108,6 @@ function createLobby(name, creatorName) {
     phase: "waiting", // waiting | playing | ended
     players: [creator],
     pot: 0,
-    currentBuyInAmount: settings.buyInAmount,
     dealerIndex: 0,
     settings,
     actionLog: [],
@@ -155,11 +153,17 @@ function advanceDealer(lobby) {
   if (n > 0) lobby.dealerIndex = (lobby.dealerIndex + 1) % n;
 }
 
-function computeCurrentBuyIn(lobby) {
-  const { buyInAmount, roundsUntilDoubleBuyIn } = lobby.settings;
-  if (!roundsUntilDoubleBuyIn || roundsUntilDoubleBuyIn === 0) return buyInAmount;
-  const doublings = Math.floor((lobby.round - 1) / roundsUntilDoubleBuyIn);
-  return buyInAmount * Math.pow(2, doublings);
+function computeCurrentBlinds(lobby) {
+  const { smallBlind, bigBlind, roundsUntilDoubleBlinds } = lobby.settings;
+  if (!roundsUntilDoubleBlinds || roundsUntilDoubleBlinds === 0) {
+    return { smallBlind, bigBlind };
+  }
+  const doublings = Math.floor((lobby.round - 1) / roundsUntilDoubleBlinds);
+  const factor = Math.pow(2, doublings);
+  return {
+    smallBlind: smallBlind * factor,
+    bigBlind: bigBlind * factor,
+  };
 }
 
 function logAction(lobby, playerName, action, amount) {
@@ -175,11 +179,11 @@ function logAction(lobby, playerName, action, amount) {
 }
 
 function sanitizeLobby(lobby) {
-  // Return full state — clients need everything
+  const currentBlinds = computeCurrentBlinds(lobby);
   return {
     ...lobby,
-    currentBuyInAmount: computeCurrentBuyIn(lobby),
-    blinds: getBlinds(lobby),
+    currentBlinds,
+    blinds: getBlinds(lobby), // note: this uses base settings currently, might need update if visual blinds should show doubled values
     orderedPlayers: getOrderedPlayers(lobby).map((p) => p.id),
   };
 }
@@ -218,9 +222,8 @@ app.post("/api/lobbies", async (req, res) => {
     if (initSettings) {
       const s = lobby.settings;
       if (initSettings.startingChips) s.startingChips = parseInt(initSettings.startingChips) || s.startingChips;
-      if (initSettings.buyInAmount) s.buyInAmount = parseInt(initSettings.buyInAmount) || s.buyInAmount;
-      if (initSettings.roundsUntilDoubleBuyIn !== undefined) s.roundsUntilDoubleBuyIn = parseInt(initSettings.roundsUntilDoubleBuyIn) || 0;
-      if (initSettings.raiseMustExceedBuyIn !== undefined) s.raiseMustExceedBuyIn = !!initSettings.raiseMustExceedBuyIn;
+      if (initSettings.roundsUntilDoubleBlinds !== undefined) s.roundsUntilDoubleBlinds = parseInt(initSettings.roundsUntilDoubleBlinds) || 0;
+      if (initSettings.raiseMustExceedBigBlind !== undefined) s.raiseMustExceedBigBlind = !!initSettings.raiseMustExceedBigBlind;
       if (initSettings.blindsMode !== undefined) s.blindsMode = !!initSettings.blindsMode;
       if (initSettings.smallBlind) s.smallBlind = parseInt(initSettings.smallBlind) || s.smallBlind;
       if (initSettings.bigBlind) s.bigBlind = parseInt(initSettings.bigBlind) || s.bigBlind;
@@ -230,9 +233,7 @@ app.post("/api/lobbies", async (req, res) => {
     const creator = lobby.players[0];
     creator.chips = lobby.settings.startingChips;
     creator.totalBoughtIn = lobby.settings.startingChips;
-    logAction(lobby, creator.name, "buy-in", lobby.settings.startingChips);
-
-    lobby.currentBuyInAmount = computeCurrentBuyIn(lobby);
+    logAction(lobby, creator.name, "starting chips", lobby.settings.startingChips);
 
     await saveLobby(lobby);
     await addLobbyToIndex(lobby.code);
@@ -278,7 +279,7 @@ app.post("/api/lobbies/:code/join", async (req, res) => {
         lobby.settings.tableOrder.push(player.id);
       }
       logAction(lobby, player.name, "joined", null);
-      if (player.chips > 0) logAction(lobby, player.name, "buy-in", player.chips);
+      if (player.chips > 0) logAction(lobby, player.name, "starting chips", player.chips);
     }
 
     await saveLobby(lobby);
@@ -316,16 +317,20 @@ io.on("connection", (socket) => {
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
-  socket.on("action:buyin", async ({ code, playerId }) => {
+  socket.on("action:transfer_chips", async ({ code, fromPlayerId, toPlayerId, amount }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
-    const player = getPlayerById(lobby, playerId);
-    if (!player) return socket.emit("error", "Player not found");
+    const sender = getPlayerById(lobby, fromPlayerId);
+    const receiver = getPlayerById(lobby, toPlayerId);
+    if (!sender || !receiver) return socket.emit("error", "Player not found");
 
-    const amount = computeCurrentBuyIn(lobby);
-    player.chips += amount;
-    player.totalBoughtIn += amount;
-    logAction(lobby, player.name, "buy-in", amount);
+    const amt = parseInt(amount);
+    if (isNaN(amt) || amt <= 0) return socket.emit("error", "Invalid amount");
+    if (sender.chips < amt) return socket.emit("error", "Insufficient chips");
+
+    sender.chips -= amt;
+    receiver.chips += amt;
+    logAction(lobby, sender.name, `gave ${amt} to ${receiver.name}`, null);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });
@@ -339,9 +344,10 @@ io.on("connection", (socket) => {
     const amt = parseInt(amount);
     if (isNaN(amt) || amt <= 0) return socket.emit("error", "Invalid amount");
 
-    if (lobby.settings.raiseMustExceedBuyIn) {
-      const buyIn = computeCurrentBuyIn(lobby);
-      if (amt <= buyIn) return socket.emit("error", `Raise must exceed buy-in (${buyIn})`);
+    if (lobby.settings.raiseMustExceedBigBlind) {
+      const currentBlinds = computeCurrentBlinds(lobby);
+      const min = lobby.settings.blindsMode ? currentBlinds.bigBlind : lobby.settings.smallBlind;
+      if (amt < min) return socket.emit("error", `Raise must meet minimum (${min})`);
     }
 
     const actual = Math.min(amt, player.chips); // clamp to available (all-in)
@@ -446,7 +452,6 @@ io.on("connection", (socket) => {
     if (!lobby) return socket.emit("error", "Lobby not found");
 
     lobby.round += 1;
-    lobby.currentBuyInAmount = computeCurrentBuyIn(lobby);
     advanceDealer(lobby);
     logAction(lobby, "—", "new round", lobby.round);
     await saveLobby(lobby);
@@ -461,29 +466,13 @@ io.on("connection", (socket) => {
 
     const s = lobby.settings;
     if (settings.startingChips !== undefined) s.startingChips = parseInt(settings.startingChips) || s.startingChips;
-    if (settings.buyInAmount !== undefined) s.buyInAmount = parseInt(settings.buyInAmount) || s.buyInAmount;
-    if (settings.roundsUntilDoubleBuyIn !== undefined) s.roundsUntilDoubleBuyIn = parseInt(settings.roundsUntilDoubleBuyIn) || 0;
-    if (settings.raiseMustExceedBuyIn !== undefined) s.raiseMustExceedBuyIn = !!settings.raiseMustExceedBuyIn;
+    if (settings.roundsUntilDoubleBlinds !== undefined) s.roundsUntilDoubleBlinds = parseInt(settings.roundsUntilDoubleBlinds) || 0;
+    if (settings.raiseMustExceedBigBlind !== undefined) s.raiseMustExceedBigBlind = !!settings.raiseMustExceedBigBlind;
     if (settings.blindsMode !== undefined) s.blindsMode = !!settings.blindsMode;
     if (settings.smallBlind !== undefined) s.smallBlind = parseInt(settings.smallBlind) || s.smallBlind;
     if (settings.bigBlind !== undefined) s.bigBlind = parseInt(settings.bigBlind) || s.bigBlind;
     if (settings.tableOrder !== undefined && Array.isArray(settings.tableOrder)) s.tableOrder = settings.tableOrder;
 
-    lobby.currentBuyInAmount = computeCurrentBuyIn(lobby);
-    await saveLobby(lobby);
-    io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
-  });
-
-  socket.on("settings:give_chips", async ({ code, playerId, amount }) => {
-    const lobby = await getLobby(code);
-    if (!lobby) return socket.emit("error", "Lobby not found");
-    const player = getPlayerById(lobby, playerId);
-    if (!player) return socket.emit("error", "Player not found");
-
-    const amt = parseInt(amount);
-    if (isNaN(amt)) return socket.emit("error", "Invalid amount");
-    player.chips = Math.max(0, player.chips + amt);
-    logAction(lobby, player.name, amt >= 0 ? "chips added" : "chips removed", Math.abs(amt));
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });

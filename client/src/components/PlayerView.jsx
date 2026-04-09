@@ -3,11 +3,13 @@ import { useState } from "react";
 export default function PlayerView({ lobby, me, emit, code, showToast }) {
   const [raiseAmt, setRaiseAmt] = useState("");
   const [callAmt, setCallAmt] = useState("");
+  const [transferAmt, setTransferAmt] = useState("");
+  const [transferTarget, setTransferTarget] = useState(null);
   const [showCallInput, setShowCallInput] = useState(false);
   const [showRaiseInput, setShowRaiseInput] = useState(false);
   const [showCashOut, setShowCashOut] = useState(false);
 
-  const buyIn = lobby.currentBuyInAmount;
+  const currentBlinds = lobby.currentBlinds || { smallBlind: lobby.settings.smallBlind, bigBlind: lobby.settings.bigBlind };
   const pot = lobby.pot;
 
   function doAction(event, data = {}) {
@@ -21,6 +23,18 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
     doAction("action:raise", { amount: amt });
     setRaiseAmt("");
     setShowRaiseInput(false);
+  }
+
+  function handleTransfer() {
+    const amt = parseInt(transferAmt);
+    if (!amt || amt <= 0) return showToast("Enter a valid amount", "error");
+    if (amt > me.chips) return showToast("Not enough chips", "error");
+    if (!transferTarget) return showToast("Select a player", "error");
+
+    emit("action:transfer_chips", { code, fromPlayerId: me.id, toPlayerId: transferTarget.id, amount: amt });
+    setTransferAmt("");
+    setTransferTarget(null);
+    showToast(`Gave ${amt.toLocaleString()} chips to ${transferTarget.name}`);
   }
 
   function handleCall() {
@@ -49,8 +63,8 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
       {lobby.settings.blindsMode && blinds && (isDealer || isSB || isBB) && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {isDealer && <span className="badge badge-dealer">Dealer</span>}
-          {isSB && <span className="badge badge-sb">Small Blind · {lobby.settings.smallBlind}</span>}
-          {isBB && <span className="badge" style={{ background: "var(--purple)", color: "#fff", opacity: 0.9 }}>Big Blind · {lobby.settings.bigBlind}</span>}
+          {isSB && <span className="badge badge-sb">Small Blind · {currentBlinds.smallBlind}</span>}
+          {isBB && <span className="badge" style={{ background: "var(--purple)", color: "#fff", opacity: 0.9 }}>Big Blind · {currentBlinds.bigBlind}</span>}
         </div>
       )}
 
@@ -59,25 +73,53 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
         <div className="chip-label">Your chips</div>
         <div className="chip-count big" style={{ marginTop: 4 }}>{me.chips.toLocaleString()}</div>
         <div style={{ marginTop: 8, display: "flex", gap: 16, justifyContent: "center" }}>
-          <span className="small">Bought in: <strong style={{ color: "var(--text)" }}>{me.totalBoughtIn.toLocaleString()}</strong></span>
+          <span className="small">Starting chips: <strong style={{ color: "var(--text)" }}>{lobby.settings.startingChips.toLocaleString()}</strong></span>
           <span className="small">Pot: <strong style={{ color: "var(--gold)" }}>{pot.toLocaleString()}</strong></span>
         </div>
       </div>
 
-      {/* Buy In */}
+      {/* Give Chips (Replaces Buy In) */}
       <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontWeight: 600 }}>Buy In</div>
-            <div className="small">{buyIn.toLocaleString()} chips</div>
-          </div>
+          <div style={{ fontWeight: 600 }}>Give Chips</div>
           <button
             className="btn-green btn-sm"
-            onClick={() => doAction("action:buyin")}
+            onClick={() => { setTransferTarget(transferTarget ? null : "select"); setShowRaiseInput(false); setShowCallInput(false); }}
           >
-            + {buyIn.toLocaleString()}
+            Send chips…
           </button>
         </div>
+        
+        {transferTarget && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {lobby.players.filter(p => p.id !== me.id).map(p => (
+                <button 
+                  key={p.id}
+                  className={`btn-sm ${transferTarget?.id === p.id ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() => setTransferTarget(p)}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+            
+            {transferTarget !== "select" && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  type="number"
+                  placeholder={`Amount to give ${transferTarget.name}`}
+                  value={transferAmt}
+                  onChange={(e) => setTransferAmt(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleTransfer()}
+                  style={{ flex: 1 }}
+                  autoFocus
+                />
+                <button className="btn-green btn-sm" onClick={handleTransfer}>Give</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Call */}
@@ -86,7 +128,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
           <div style={{ fontWeight: 600 }}>Call</div>
           <button
             className="btn-secondary btn-sm"
-            onClick={() => { setShowCallInput(!showCallInput); setShowRaiseInput(false); }}
+            onClick={() => { setShowCallInput(!showCallInput); setShowRaiseInput(false); setTransferTarget(null); }}
           >
             Enter amount
           </button>
@@ -127,13 +169,13 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontWeight: 600 }}>Raise</div>
-            {lobby.settings.raiseMustExceedBuyIn && (
-              <div className="small">Must exceed {buyIn.toLocaleString()}</div>
+            {lobby.settings.raiseMustExceedBigBlind && (
+              <div className="small">Min raise: {currentBlinds.bigBlind.toLocaleString()}</div>
             )}
           </div>
           <button
             className="btn-gold btn-sm"
-            onClick={() => { setShowRaiseInput(!showRaiseInput); setShowCallInput(false); }}
+            onClick={() => { setShowRaiseInput(!showRaiseInput); setShowCallInput(false); setTransferTarget(null); }}
           >
             Enter amount
           </button>
@@ -142,13 +184,13 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
           <div style={{ display: "flex", gap: 8 }}>
             <input
               type="number"
-              placeholder={lobby.settings.raiseMustExceedBuyIn ? `> ${buyIn}` : "Amount"}
+              placeholder={lobby.settings.raiseMustExceedBigBlind ? `min ${currentBlinds.bigBlind}` : "Amount"}
               value={raiseAmt}
               onChange={(e) => setRaiseAmt(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleRaise()}
               style={{ flex: 1 }}
               autoFocus
-              min={lobby.settings.raiseMustExceedBuyIn ? buyIn + 1 : 1}
+              min={lobby.settings.raiseMustExceedBigBlind ? currentBlinds.bigBlind : 1}
               max={me.chips}
             />
             <button className="btn-gold btn-sm" onClick={handleRaise}>Raise</button>
