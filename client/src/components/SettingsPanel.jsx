@@ -275,7 +275,7 @@ export default function SettingsPanel({ lobby, me, emit, code, showToast }) {
                           type="range"
                           min={-p.chips}
                           max={Math.max(5000, p.chips)}
-                          step="1"
+                          step="5"
                           value={chipAdjAmt || 0}
                           onChange={(e) => setChipAdjAmt(e.target.value)}
                           style={{ width: "100%", accentColor: "var(--blue)" }}
