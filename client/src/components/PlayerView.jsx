@@ -67,18 +67,24 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
   return (
     <div className="page" style={{ paddingBottom: 24 }}>
       {/* Turn indicator */}
-      <div className="card" style={{ 
-        background: isMyTurn ? "var(--blue-bg)" : "var(--bg2)", 
-        borderColor: isMyTurn ? "var(--blue)" : "var(--border)",
-        textAlign: "center",
-        padding: "12px"
-      }}>
-        {isMyTurn ? (
-          <div style={{ color: "var(--blue)", fontWeight: 700 }}>★ Your Turn</div>
-        ) : (
-          <div className="small">Waiting for <strong>{currentPlayer?.name || "someone"}</strong>…</div>
-        )}
-      </div>
+      {lobby.phase === "waiting" ? (
+        <div className="card" style={{ textAlign: "center", padding: "12px", background: "var(--bg2)", borderColor: "var(--border)" }}>
+          <div className="small">Waiting for game to start…</div>
+        </div>
+      ) : (
+        <div className="card" style={{ 
+          background: isMyTurn ? "var(--blue-bg)" : "var(--bg2)", 
+          borderColor: isMyTurn ? "var(--blue)" : "var(--border)",
+          textAlign: "center",
+          padding: "12px"
+        }}>
+          {isMyTurn ? (
+            <div style={{ color: "var(--blue)", fontWeight: 700 }}>★ Your Turn</div>
+          ) : (
+            <div className="small">Waiting for <strong>{currentPlayer?.name || "someone"}</strong>…</div>
+          )}
+        </div>
+      )}
 
       {/* Blind badges */}
       {lobby.settings.blindsMode && blinds && (isDealer || isSB || isBB) && (
@@ -161,7 +167,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
       </div>
 
       {/* Raise */}
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10, opacity: !isMyTurn ? 0.6 : 1 }}>
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10, opacity: (!isMyTurn || lobby.phase === "waiting") ? 0.6 : 1 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontWeight: 600 }}>Raise</div>
@@ -172,7 +178,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
           <button
             className="btn-gold btn-sm"
             onClick={() => { setShowRaiseInput(!showRaiseInput); setTransferTarget(null); }}
-            disabled={!isMyTurn}
+            disabled={!isMyTurn || lobby.phase === "waiting"}
           >
             Enter amount
           </button>
@@ -230,7 +236,7 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
         <button 
           className={amountToCall > 0 ? "btn-primary" : "btn-secondary"} 
           onClick={handleCheckOrCall}
-          disabled={!isMyTurn}
+          disabled={!isMyTurn || lobby.phase === "waiting"}
         >
           {amountToCall > 0 ? (
             amountToCall >= me.chips ? `All In · ${me.chips.toLocaleString()}` : `Call · ${amountToCall.toLocaleString()}`
@@ -240,11 +246,11 @@ export default function PlayerView({ lobby, me, emit, code, showToast }) {
           className="btn-secondary"
           style={{ color: "var(--text3)" }}
           onClick={() => { doAction("action:fold"); showToast("Fold"); }}
-          disabled={!isMyTurn}
+          disabled={!isMyTurn || lobby.phase === "waiting"}
         >
           Fold
         </button>
-        {pot > 0 && isMyTurn && (
+        {pot > 0 && (
           <button
             className="btn-gold"
             onClick={() => { doAction("action:win_pot"); showToast("Claimed pot!"); }}

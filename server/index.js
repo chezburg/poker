@@ -155,7 +155,7 @@ function createLobby(name, creatorName) {
     code,
     name,
     createdAt: Date.now(),
-    round: 1,
+    round: 0,
     phase: "waiting", // waiting | playing | ended
     players: [creator],
     pot: 0,
@@ -166,6 +166,7 @@ function createLobby(name, creatorName) {
     actionLog: [],
     pots: [], // { amount: number, eligible: string[] }
     contributions: {}, // { playerId: number }
+    foldedPlayers: [],
   };
 }
 
@@ -189,19 +190,40 @@ function getOrderedPlayers(lobby) {
 }
 
 function advanceTurn(lobby) {
+  if (!lobby.foldedPlayers) lobby.foldedPlayers = [];
   const ordered = getOrderedPlayers(lobby);
   if (ordered.length === 0) return;
 
   const currentIdx = ordered.findIndex((p) => p.id === lobby.currentTurn);
-  // Find next connected player
+  
+  let validPlayers = 0;
+  for (const p of ordered) {
+    if (p.connected && !lobby.foldedPlayers.includes(p.id) && p.chips > 0) validPlayers++;
+  }
+
+  if (validPlayers < 2 && ordered.some(p => p.chips === 0 && !lobby.foldedPlayers.includes(p.id))) {
+    // Action closes if there is only 1 active player left and at least one is all-in, 
+    // or everyone folded except 1. Wait, actually if everyone folded, round is over.
+    // If 1 is active, but others are all-in, action is closed for the remaining active player if they called.
+    // Let's just do a basic skip logic for now
+  }
+
   let nextIdx = (currentIdx + 1) % ordered.length;
   let attempts = 0;
-  while (!ordered[nextIdx].connected && attempts < ordered.length) {
+  while (attempts < ordered.length) {
+    const p = ordered[nextIdx];
+    if (p.connected && !lobby.foldedPlayers.includes(p.id) && p.chips > 0) {
+      break;
+    }
     nextIdx = (nextIdx + 1) % ordered.length;
     attempts++;
   }
   
-  lobby.currentTurn = ordered[nextIdx].id;
+  if (attempts < ordered.length) {
+    lobby.currentTurn = ordered[nextIdx].id;
+  } else {
+    lobby.currentTurn = null; // no valid players
+  }
   lobby.turnCount += 1;
 }
 
@@ -212,17 +234,25 @@ function getBlinds(lobby) {
   if (n < 2) return null;
 
   const dealerIdx = lobby.dealerIndex % n;
-  // Standard non-heads-up: Dealer, SB (Dealer+1), BB (Dealer+2)
-  // We'll simplify and use this even for heads-up if user wants to remove special dealer handling.
+  
+  if (n === 2) {
+    return {
+      smallBlind: ordered[dealerIdx],
+      bigBlind: ordered[(dealerIdx + 1) % n],
+      dealer: ordered[dealerIdx]
+    };
+  }
+
   return {
     smallBlind: ordered[(dealerIdx + 1) % n],
     bigBlind: ordered[(dealerIdx + 2) % n],
+    dealer: ordered[dealerIdx]
   };
 }
 
 function startNewRound(lobby) {
   // Prevent double-initialization if already in progress
-  if (Object.keys(lobby.contributions || {}).length > 0 && lobby.turnCount === 0) return;
+  if (Object.keys(lobby.contributions || {}).length > 0 && lobby.turnCount === 0 && lobby.round > 0) return;
 
   lobby.round += 1;
   advanceDealer(lobby);
@@ -230,6 +260,7 @@ function startNewRound(lobby) {
   lobby.pots = [];
   lobby.pot = 0;
   lobby.turnCount = 0;
+  lobby.foldedPlayers = [];
 
   const ordered = getOrderedPlayers(lobby);
   const n = ordered.length;
@@ -257,10 +288,14 @@ function startNewRound(lobby) {
 
     calculatePots(lobby);
 
-    // Turn starts after BB (UTG)
-    const bbIdx = ordered.findIndex(p => p.id === blinds.bigBlind.id);
-    const startIdx = (bbIdx + 1) % n;
-    lobby.currentTurn = ordered[startIdx].id;
+    // Turn starts after BB (UTG) or Dealer if heads up
+    if (n === 2) {
+      lobby.currentTurn = blinds.smallBlind.id;
+    } else {
+      const bbIdx = ordered.findIndex(p => p.id === blinds.bigBlind.id);
+      const startIdx = (bbIdx + 1) % n;
+      lobby.currentTurn = ordered[startIdx].id;
+    }
   } else {
     const startIdx = (lobby.dealerIndex + 1) % n;
     lobby.currentTurn = ordered[startIdx].id;
@@ -501,6 +536,7 @@ io.on("connection", (socket) => {
   socket.on("action:raise", async ({ code, playerId, amount }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.phase === "waiting") return socket.emit("error", "Game has not started");
     if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
@@ -527,6 +563,7 @@ io.on("connection", (socket) => {
   socket.on("action:call", async ({ code, playerId, amount }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.phase === "waiting") return socket.emit("error", "Game has not started");
     if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
@@ -549,6 +586,7 @@ io.on("connection", (socket) => {
   socket.on("action:fold", async ({ code, playerId }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.phase === "waiting") return socket.emit("error", "Game has not started");
     if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
@@ -565,6 +603,9 @@ io.on("connection", (socket) => {
     // We don't want to lose the money already in the pot, and calculatePots uses levels.
     // Actually, folding shouldn't change the pot amounts, only eligibility.
 
+    if (!lobby.foldedPlayers) lobby.foldedPlayers = [];
+    lobby.foldedPlayers.push(player.id);
+
     logAction(lobby, player.name, "fold", null);
     advanceTurn(lobby);
     await saveLobby(lobby);
@@ -574,6 +615,7 @@ io.on("connection", (socket) => {
   socket.on("action:check", async ({ code, playerId }) => {
     const lobby = await getLobby(code);
     if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.phase === "waiting") return socket.emit("error", "Game has not started");
     if (lobby.currentTurn && playerId !== lobby.currentTurn) return socket.emit("error", "Not your turn");
     const player = getPlayerById(lobby, playerId);
     if (!player) return socket.emit("error", "Player not found");
@@ -682,6 +724,18 @@ io.on("connection", (socket) => {
 
     const winners = playerIds.map(id => getPlayerById(lobby, id)?.name).filter(Boolean);
     logAction(lobby, winners.join(" & "), "split pot", totalAwarded);
+    await saveLobby(lobby);
+    io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
+  });
+
+  socket.on("action:start_game", async ({ code }) => {
+    const lobby = await getLobby(code);
+    if (!lobby) return socket.emit("error", "Lobby not found");
+    if (lobby.phase !== "waiting") return socket.emit("error", "Game already started");
+
+    lobby.phase = "playing";
+    startNewRound(lobby);
+    logAction(lobby, "—", "game started", null);
     await saveLobby(lobby);
     io.to(lobby.code).emit("lobby:update", sanitizeLobby(lobby));
   });

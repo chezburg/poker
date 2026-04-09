@@ -10,6 +10,11 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
   const pot = lobby.pot;
   const pots = lobby.pots || [];
 
+  function handleStartGame() {
+    emit("action:start_game", { code });
+    showToast("Game started!");
+  }
+
   function handleNextRound() {
     emit("action:next_round", { code });
     showToast("Next round started");
@@ -37,6 +42,11 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
     <div className="page" style={{ paddingBottom: 24 }}>
       {/* Action Buttons */}
       <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+        {lobby.phase === "waiting" && (
+          <button className="btn-green" onClick={handleStartGame} style={{ flex: 1 }}>
+            Start Game
+          </button>
+        )}
         {pot > 0 && (
           <button
             className="btn-gold"
@@ -46,9 +56,11 @@ export default function TableView({ lobby, me, emit, code, showToast }) {
             Award Pot ({pot.toLocaleString()})
           </button>
         )}
-        <button className="btn-primary" onClick={handleNextRound} style={{ flex: 1 }}>
-          Force Next Round →
-        </button>
+        {lobby.phase !== "waiting" && (
+          <button className="btn-primary" onClick={handleNextRound} style={{ flex: 1 }}>
+            Force Next Round →
+          </button>
+        )}
       </div>
       <div className="small" style={{ textAlign: "center" }}>
         Blinds: {currentBlinds.smallBlind} / {currentBlinds.bigBlind}
