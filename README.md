@@ -77,12 +77,12 @@ The app is now available on:
 If you're exposing via a Pangolin tunnel, set the public URL in `.env` before building:
 
 ```env
-VITE_SERVER_URL=https://poker.yourdomain.com:3001
+VITE_SERVER_URL=https://poker.yourdomain.com:3003
 ```
 
 Or if your tunnel proxies both frontend and API under one domain with path routing,
-configure the tunnel to forward `/api` and `/socket.io` to port 3001, and everything
-else to port 80. Then leave `VITE_SERVER_URL` empty.
+configure the tunnel to forward `/api` and `/socket.io` to port 3003 (or your configured `SERVER_PORT`), and everything
+else to port 8982 (or your configured `CLIENT_PORT`). Then leave `VITE_SERVER_URL` empty.
 
 **Note**: `VITE_SERVER_URL` is baked into the frontend at build time. After changing it,
 rebuild with `docker compose up -d --build`.
@@ -122,9 +122,9 @@ rebuild with `docker compose up -d --build`.
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌───────┐
 │  Nginx      │     │  Node.js server  │     │ Redis │
-│  (port 80)  │────▶│  Express +       │────▶│       │
+│ (port 8982) │────▶│  Express +       │────▶│       │
 │  React SPA  │     │  Socket.io       │     │ state │
-│             │◀────│  (port 3001)     │◀────│       │
+│             │◀────│  (port 3003)     │◀────│       │
 └─────────────┘     └──────────────────┘     └───────┘
 ```
 
