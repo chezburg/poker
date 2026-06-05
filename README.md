@@ -69,8 +69,8 @@ docker compose up -d --build
 ```
 
 The app is now available on:
-- **Frontend**: http://your-server-ip (port 80)
-- **API / WebSocket**: http://your-server-ip:3001
+- **Frontend**: http://your-server-ip:8982 (or your configured `CLIENT_PORT`)
+- **API / WebSocket**: http://your-server-ip:3003 (or your configured `SERVER_PORT`)
 
 ### 4. Pangolin tunnel setup
 

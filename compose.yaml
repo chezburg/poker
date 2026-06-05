@@ -21,13 +21,13 @@
       environment:
         - NODE_ENV=production
         - REDIS_URL=redis://redis:6379
-        - PORT=3001
+        - PORT=${PORT:-3001}
         - LOBBY_TIMEOUT_HOURS=${LOBBY_TIMEOUT_HOURS:-24}
         - MAX_LOBBIES=${MAX_LOBBIES:-5}
       depends_on:
         - redis
       ports:
-        - "3003:3001"
+        - "${SERVER_PORT:-3003}:${PORT:-3001}"
 
     client:
       container_name: pokerclient
@@ -40,7 +40,7 @@
         - poker-net
         - newt-net
       ports:
-        - "8982:80"
+        - "${CLIENT_PORT:-8982}:80"
       depends_on:
         - server
 
